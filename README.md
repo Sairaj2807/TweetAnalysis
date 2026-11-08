@@ -14,6 +14,25 @@ assessment.
 
 ---
 
+## Interactive dashboard
+
+> ```bash
+> pip install -r requirements.txt
+> streamlit run streamlit_app.py
+> ```
+> Opens at **http://localhost:8501**. This is the easiest way to see the
+> whole project working without reading any code:
+> - **Live Demo tab** — one button runs the entire scrape → ingest → join →
+>   train → predict pipeline live, and renders the n+0..n+5 forecast,
+>   out-of-sample metrics, and interactive Plotly charts (actual-vs-predicted,
+>   sentiment-vs-price) right in the browser.
+> - **Historical Backtest tab** — the 2021-2023 evaluation report and chart.
+> - **Combined Backtest tab** — the 2014-2023 combined evaluation report and chart.
+>
+> See [§5e](#5e-interactive-dashboard-optional-nicer-presentation) for details.
+
+---
+
 ## 1. What this project does
 
 The assignment: build an ML pipeline that (a) scrapes real X posts about an

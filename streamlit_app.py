@@ -114,16 +114,23 @@ with tab_live:
         c1, c2 = st.columns([1, 1])
         with c1:
             st.dataframe(
-                matrix.style.format({"predicted_price": "{:,.2f}", "change_pct": "{:+.2f}%"}),
-                hide_index=True, use_container_width=True,
+                matrix, hide_index=True, use_container_width=True,
+                column_config={
+                    "predicted_price": st.column_config.NumberColumn("predicted_price", format="%.2f"),
+                    "change_pct": st.column_config.NumberColumn("change_pct", format="%+.2f%%"),
+                },
             )
         with c2:
             st.plotly_chart(prediction_matrix_chart(matrix), use_container_width=True)
 
         st.markdown("### Out-of-sample performance (honest -- never seen during training)")
         st.dataframe(
-            metrics_df.style.format({"MAE": "{:.2f}", "RMSE": "{:.2f}", "Direction Accuracy": "{:.1%}"}),
-            hide_index=True, use_container_width=True,
+            metrics_df, hide_index=True, use_container_width=True,
+            column_config={
+                "MAE": st.column_config.NumberColumn("MAE", format="%.2f"),
+                "RMSE": st.column_config.NumberColumn("RMSE", format="%.2f"),
+                "Direction Accuracy": st.column_config.NumberColumn("Direction Accuracy", format="percent"),
+            },
         )
         avg_dir_acc = metrics_df["Direction Accuracy"].mean()
         st.caption(
