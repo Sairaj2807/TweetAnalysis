@@ -22,6 +22,34 @@ from visualization.sentiment_price import plot_sentiment_vs_price
 ASSET = "BTC-USD"
 
 
+def build_window_dataset(posts: pd.DataFrame, asset_key: str) -> pd.DataFrame:
+    """Turns one scored+weighted posts window into a finalized feature+target dataset.
+    Kept per-window (not run on a concatenated multi-period posts frame) so that
+    rolling features and shift(-h) targets never bridge a date gap between windows --
+    see run_historical_backtest_combined.py, which calls this once per window and
+    concatenates the already-finalized results."""
+    start = posts["created_at_utc"].min().date()
+    end = posts["created_at_utc"].max().date()
+    print(f"  Fetching daily {ASSET} price bars for {start} -> {end}...")
+    price = yf.download(ASSET, start=str(start), end=str(end + pd.Timedelta(days=1)), interval="1d", progress=False)
+    if isinstance(price.columns, pd.MultiIndex):
+        price.columns = price.columns.get_level_values(0)
+    price = price.reset_index().rename(columns={"Date": "timestamp_utc", "Close": "price"})
+    price["timestamp_utc"] = pd.to_datetime(price["timestamp_utc"], utc=True)
+    price = price[["timestamp_utc", "price"]]
+    print(f"    {len(price)} daily price bars")
+
+    sentiment_agg = aggregate_posts_by_interval(posts, interval="1D")
+    merged = price.merge(sentiment_agg, on="timestamp_utc", how="left")
+
+    df = build_features(merged)
+    df = add_targets(df)
+    df = finalize_dataset(df)
+    df["asset"] = asset_key
+    print(f"    {len(df)} finalized rows for window {start} -> {end}")
+    return df
+
+
 def main():
     init_db()
 
@@ -35,27 +63,8 @@ def main():
     posts.to_csv("data/raw/historical_x_posts_scored.csv", index=False)
     print("  saved data/raw/historical_x_posts_scored.csv")
 
-    start = posts["created_at_utc"].min().date()
-    end = posts["created_at_utc"].max().date()
-    print(f"Fetching daily BTC-USD price bars for {start} -> {end}...")
-    price = yf.download(ASSET, start=str(start), end=str(end + pd.Timedelta(days=1)), interval="1d", progress=False)
-    if isinstance(price.columns, pd.MultiIndex):
-        price.columns = price.columns.get_level_values(0)
-    price = price.reset_index().rename(columns={"Date": "timestamp_utc", "Close": "price"})
-    price["timestamp_utc"] = pd.to_datetime(price["timestamp_utc"], utc=True)
-    price = price[["timestamp_utc", "price"]]
-    print(f"  {len(price)} daily price bars")
-
-    print("Aggregating sentiment by day...")
-    sentiment_agg = aggregate_posts_by_interval(posts, interval="1D")
-
-    merged = price.merge(sentiment_agg, on="timestamp_utc", how="left")
-
     print("Building features + 6-horizon targets (daily horizons: n+0..n+5 days)...")
-    df = build_features(merged)
-    df = add_targets(df)
-    df = finalize_dataset(df)
-    df["asset"] = ASSET + "_HIST"  # distinct asset key so it doesn't collide with live BTC-USD rows
+    df = build_window_dataset(posts, ASSET + "_HIST")
 
     print(f"Final historical dataset: {len(df)} rows")
     upsert_dataframe(df, "feature_dataset", ["asset", "timestamp_utc"])

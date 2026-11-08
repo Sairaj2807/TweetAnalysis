@@ -31,6 +31,8 @@ from processing.dataset_builder import build_and_store_dataset
 from validation.leakage_checks import assert_no_overlap
 from validation.metrics import forecast_metrics
 from validation.walk_forward import chronological_split
+from visualization.prediction_chart import plot_actual_vs_predicted
+from visualization.prediction_matrix import render_prediction_matrix_table
 
 
 def section(title: str):
@@ -83,6 +85,12 @@ def main():
         m = forecast_metrics(test[f"target_n{h}"].values, test_preds[f"n{h}"].values, test["price"].values)
         print(f"    n+{h}: MAE={m['mae']:.2f}  RMSE={m['rmse']:.2f}  Direction Accuracy={m['direction_accuracy']:.1%}")
 
+    plot_actual_vs_predicted(
+        test, test_preds, "data/reports/live_actual_vs_predicted.png",
+        title=f"{ASSET_TICKER} Actual vs Predicted (out-of-sample)",
+    )
+    print("  Saved data/reports/live_actual_vs_predicted.png")
+
     section("STEP 6: THE DELIVERABLE -- predict price at n+0, n+1, n+2, n+3, n+4, n+5")
     final_models = train_multi_horizon(dataset, feature_cols, build_xgboost_model)
     latest_row = dataset.tail(1)
@@ -92,6 +100,9 @@ def main():
 
     matrix.to_csv("data/reports/live_prediction_matrix.csv", index=False)
     print("\n  Saved to data/reports/live_prediction_matrix.csv")
+
+    render_prediction_matrix_table(matrix, "data/reports/live_prediction_matrix.png", ASSET_TICKER)
+    print("  Saved data/reports/live_prediction_matrix.png (visual matrix output)")
 
     section("DONE -- all 6 pipeline stages demonstrated end to end")
 
