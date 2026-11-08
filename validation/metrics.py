@@ -29,16 +29,27 @@ def forecast_metrics(y_true: np.ndarray, y_pred: np.ndarray, current_price: np.n
     }
 
 
-def strategy_returns_from_predictions(y_pred: np.ndarray, current_price: np.ndarray, actual_price: np.ndarray) -> np.ndarray:
+def strategy_returns_from_predictions(
+    y_pred: np.ndarray, current_price: np.ndarray, actual_price: np.ndarray, cost_bps: float = 0.0
+) -> np.ndarray:
     """Converts predictions into a simple long/short directional strategy's realized returns.
 
     Signal: go long if predicted price > current price, short if lower. Position
     is held for one horizon period; realized return is the actual price change
     over that period, signed by the predicted direction.
+
+    `cost_bps`: round-trip transaction cost in basis points charged whenever the
+    position changes from the previous period (0 by default for backward
+    compatibility, but callers should pass a nonzero value for a realistic net
+    return -- the unadjusted version books gross returns with no cost at all).
     """
     predicted_direction = np.sign(y_pred - current_price)
     actual_return = (actual_price - current_price) / current_price
-    return predicted_direction * actual_return
+    gross = predicted_direction * actual_return
+    if cost_bps > 0:
+        position_change = np.abs(np.diff(np.concatenate([[0], predicted_direction])))
+        gross = gross - position_change * (cost_bps / 10000)
+    return gross
 
 
 def sharpe_ratio(returns: np.ndarray, periods_per_year: int = PERIODS_PER_YEAR_HOURLY, risk_free_rate: float = 0.0) -> float:

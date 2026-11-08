@@ -20,7 +20,7 @@ from config.settings import ASSET_TICKER, HORIZONS
 from database.connection import init_db
 from features.feature_pipeline import FEATURE_SETS
 from models.inference import generate_prediction_matrix
-from models.multi_horizon import predict_multi_horizon, train_multi_horizon
+from models.multi_horizon import predict_multi_horizon_price, train_multi_horizon
 from models.xgboost_model import build_xgboost_model
 from processing.dataset_builder import build_and_store_dataset
 from validation.leakage_checks import assert_no_overlap
@@ -93,13 +93,13 @@ with tab_live:
         train, val, test = chronological_split(dataset)
         assert_no_overlap(train, test)
         models = train_multi_horizon(train, feature_cols, build_xgboost_model)
-        test_preds = predict_multi_horizon(models, test, feature_cols)
+        test_preds = predict_multi_horizon_price(models, test, feature_cols)
 
         metrics_rows = []
         for h in HORIZONS:
             if h == 0:
                 continue
-            m = forecast_metrics(test[f"target_n{h}"].values, test_preds[f"n{h}"].values, test["price"].values)
+            m = forecast_metrics(test[f"future_price_n{h}"].values, test_preds[f"n{h}"].values, test["price"].values)
             metrics_rows.append({"Horizon": f"n+{h}", "MAE": m["mae"], "RMSE": m["rmse"], "Direction Accuracy": m["direction_accuracy"]})
         metrics_df = pd.DataFrame(metrics_rows)
         status.write("-> out-of-sample metrics computed on data the model never trained on")

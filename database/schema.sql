@@ -64,5 +64,11 @@ CREATE TABLE IF NOT EXISTS feature_dataset (
     target_n3 REAL,
     target_n4 REAL,
     target_n5 REAL,
+    future_price_n0 REAL,
+    future_price_n1 REAL,
+    future_price_n2 REAL,
+    future_price_n3 REAL,
+    future_price_n4 REAL,
+    future_price_n5 REAL,
     PRIMARY KEY (asset, timestamp_utc)
 );

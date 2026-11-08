@@ -16,12 +16,15 @@ the 2021 bull peak, the 2022 crash) -- see README "Known limitations" for why
 this is a more convincing test of the "does sentiment add value" question
 than a single, smaller, single-regime sample.
 """
+import os
+
 import pandas as pd
 
 from database.connection import init_db
 from database.repository import upsert_dataframe
 from ingestion.historical_kaggle_loader import load_sampled_historical_posts
 from ingestion.historical_tweets_2019_loader import load_sampled_2019_posts
+from features.feature_pipeline import COMBINED_HISTORICAL_FEATURE_SETS
 from reporting.research_report import generate_evaluation_report
 from run_historical_backtest import build_window_dataset
 from sentiment.engagement_weighting import add_engagement_weight
@@ -32,24 +35,37 @@ from visualization.sentiment_price import plot_sentiment_vs_price
 ASSET_KEY = "BTC-USD_HIST_COMBINED"
 DAILY_PERIODS_PER_YEAR = 365
 
+EARLY_SCORED_CACHE = "data/raw/historical_tweets_csv_posts_scored.csv"
+KAGGLE_SCORED_CACHE = "data/raw/historical_x_posts_scored.csv"
+
+
+def _load_or_score(cache_path: str, loader_fn, label: str) -> pd.DataFrame:
+    """Scoring ~400k tweets with FinBERT takes ~35 min -- reuse a cached, already-scored
+    CSV when its sampling parameters haven't changed, instead of rescoring every run.
+    engagement_weight is always recomputed on top of the cache (cheap, no FinBERT
+    involved) so a fix to the weighting formula applies even to cached data."""
+    if os.path.exists(cache_path):
+        print(f"  loading cached scored {label} posts from {cache_path}")
+        df = pd.read_csv(cache_path)
+        df["created_at_utc"] = pd.to_datetime(df["created_at_utc"], utc=True)
+    else:
+        print(f"  no cache found, sampling + scoring {label} posts fresh...")
+        df = loader_fn(per_day_cap=200)
+        print(f"  {len(df)} posts across {df['created_at_utc'].dt.date.nunique()} days")
+        df = score_posts(df)
+        df.to_csv(cache_path, index=False)
+    return add_engagement_weight(df)
+
 
 def main():
     init_db()
 
-    print("Loading + sampling 2014-2021 posts (data/raw/tweets.csv, date-filtered)...")
-    posts_early = load_sampled_2019_posts(per_day_cap=200)
-    print(f"  {len(posts_early)} posts across {posts_early['created_at_utc'].dt.date.nunique()} days")
+    print("Loading 2014-2021 posts (data/raw/tweets.csv, date-filtered)...")
+    posts_early = _load_or_score(EARLY_SCORED_CACHE, load_sampled_2019_posts, "2014-2021")
     print(f"  Date range: {posts_early['created_at_utc'].min()} -> {posts_early['created_at_utc'].max()}")
 
-    print("Loading + sampling 2021-2023 Kaggle posts...")
-    posts_kaggle = load_sampled_historical_posts(per_day_cap=200)
-    print(f"  {len(posts_kaggle)} posts across {posts_kaggle['created_at_utc'].dt.date.nunique()} days")
-
-    print("Scoring both windows' sentiment with FinBERT (this will take a while)...")
-    posts_early = score_posts(posts_early)
-    posts_early = add_engagement_weight(posts_early)
-    posts_kaggle = score_posts(posts_kaggle)
-    posts_kaggle = add_engagement_weight(posts_kaggle)
+    print("Loading 2021-2023 Kaggle posts...")
+    posts_kaggle = _load_or_score(KAGGLE_SCORED_CACHE, load_sampled_historical_posts, "2021-2023")
 
     print("Building each window's features + targets separately (no cross-boundary leakage)...")
     print("Window 1: 2014-2021")
@@ -70,7 +86,7 @@ def main():
     )
 
     print("Running walk-forward validation (n+1..n+5 DAYS ahead, daily candles)...")
-    results = run_comparison(df, n_splits=4, periods_per_year=DAILY_PERIODS_PER_YEAR)
+    results = run_comparison(df, n_splits=4, periods_per_year=DAILY_PERIODS_PER_YEAR, feature_sets=COMBINED_HISTORICAL_FEATURE_SETS)
     summary = summarize_by_feature_set_and_horizon(results)
     summary.to_csv("data/reports/historical_model_comparison_summary_combined.csv", index=False)
 

@@ -1,12 +1,12 @@
 import pandas as pd
 
 from config.settings import HORIZONS
-from models.multi_horizon import predict_multi_horizon
+from models.multi_horizon import predict_multi_horizon_price
 
 
 def generate_prediction_matrix(models: dict, latest_row: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
     """Builds the n+0..n+5 prediction matrix for the most recent available data point."""
-    preds = predict_multi_horizon(models, latest_row, feature_cols)
+    preds = predict_multi_horizon_price(models, latest_row, feature_cols)
     reference_price = preds["n0"].iloc[0]
 
     rows = []

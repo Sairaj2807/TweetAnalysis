@@ -76,13 +76,13 @@ def main():
     models = train_multi_horizon(train, feature_cols, build_xgboost_model)
     print(f"  Trained {len(models)} models (one per horizon: {list(models.keys())})")
 
-    from models.multi_horizon import predict_multi_horizon
-    test_preds = predict_multi_horizon(models, test, feature_cols)
+    from models.multi_horizon import predict_multi_horizon_price
+    test_preds = predict_multi_horizon_price(models, test, feature_cols)
     print("\n  Out-of-sample performance (on data the model never saw during training):")
     for h in HORIZONS:
         if h == 0:
             continue
-        m = forecast_metrics(test[f"target_n{h}"].values, test_preds[f"n{h}"].values, test["price"].values)
+        m = forecast_metrics(test[f"future_price_n{h}"].values, test_preds[f"n{h}"].values, test["price"].values)
         print(f"    n+{h}: MAE={m['mae']:.2f}  RMSE={m['rmse']:.2f}  Direction Accuracy={m['direction_accuracy']:.1%}")
 
     plot_actual_vs_predicted(
