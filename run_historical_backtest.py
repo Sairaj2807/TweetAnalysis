@@ -26,7 +26,7 @@ def main():
     init_db()
 
     print("Loading + sampling historical Kaggle posts...")
-    posts = load_sampled_historical_posts(per_day_cap=150)
+    posts = load_sampled_historical_posts(per_day_cap=200)
     print(f"  {len(posts)} posts across {posts['created_at_utc'].dt.date.nunique()} days")
 
     print("Scoring sentiment with FinBERT (this will take a few minutes)...")
