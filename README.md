@@ -319,7 +319,28 @@ forecasting value, rather than just producing an attractive-looking chart.
 
 ---
 
-## 8. Prototype
+## 8. Sample saved model
+
+`saved_models/sample_xgboost_multi_horizon.pkl` is a standalone sample
+artifact: all 5 horizon models (n+1..n+5), trained once on
+`data/processed/historical_feature_dataset_combined.csv` (2,633 rows) and
+saved with `joblib`, included so a reviewer can inspect/load a concrete
+trained model without running the pipeline first.
+
+**It is not loaded or referenced by any pipeline script.** `main.py`,
+`demo_end_to_end.py`, `run_historical_backtest*.py`, and `streamlit_app.py`
+all retrain fresh in memory every run, by design — this file is purely a
+point-in-time sample, not a production artifact the app depends on.
+
+To load and use it:
+```python
+import joblib
+artifact = joblib.load("saved_models/sample_xgboost_multi_horizon.pkl")
+models, feature_cols = artifact["models"], artifact["feature_cols"]
+# models[1] is the n+1 XGBoost model, models[2] is n+2, etc.
+```
+
+## 9. Prototype
 
 `prototype/` contains the original throwaway proof-of-concept (yfinance +
 mock tweet text + a single XGBoost model) used to validate the pipeline
