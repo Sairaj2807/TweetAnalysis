@@ -1,0 +1,20 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+data/*.db
+saved_models/*.pkl
+saved_models/*.json
+.ipynb_checkpoints/
+
+# legacy MVP scratch files at repo root (kept locally, not part of final submission)
+/final_dataset.csv
+/price_data.csv
+/tweets_data.csv
+/tweets_scored.csv
+/prediction_chart.png

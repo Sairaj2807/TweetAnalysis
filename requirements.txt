@@ -1,0 +1,15 @@
+apify-client
+tavily-python
+pandas
+numpy
+scipy
+scikit-learn
+xgboost
+lightgbm
+torch
+transformers
+sqlalchemy
+python-dotenv
+matplotlib
+yfinance
+tabulate
