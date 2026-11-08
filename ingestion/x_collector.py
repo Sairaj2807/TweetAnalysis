@@ -1,16 +1,37 @@
-"""Collects X posts about an asset using Apify, across ticker/name/contextual queries.
+"""Collects X posts about an asset using Apify's kaitoeasyapi tweet-scraper actor.
 
-NOTE: Apify X/Twitter scraping actors vary in their exact input schema. The
-`run_input` built below targets the common "searchTerms" / "maxItems" shape used
-by most X search actors on the Apify Store. If the actor you pick (set via
-APIFY_ACTOR_ID) expects different field names, adjust `_build_run_input` only --
-everything downstream (normalization, dedup, DB storage) stays the same.
+Actor: kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest
+Chosen over apidojo/tweet-scraper because the apidojo actor's Free-Plan account
+tier hard-caps every run at 10 items regardless of maxItems or available credit;
+this actor has no such cap (confirmed: 300 real items in one unfiltered call).
+Pay-per-result, ~$0.18-0.25 per 1,000 tweets.
+
+IMPORTANT, CONFIRMED LIMITATION (tested 2026-11-08): this actor's since_time/
+until_time historical date filters do NOT reliably work for windows beyond the
+very recent past. Requesting a window from months ago still returns today's
+tweets, and pads any shortfall with fabricated placeholder items (id="-1",
+createdAt=None, text that looks plausible but is synthetic) rather than
+returning fewer real results. This is true of the apidojo actor too (its docs
+separately warn date-filtered queries "may return incomplete or empty
+results"). Conclusion: cheap/free-tier Apify X actors cannot reliably backfill
+months of history -- this is a real, actor-side data-availability limit, not a
+bug in our code. See README "Known Limitations" for how this project handles
+historical data instead (a pre-existing historical tweets dataset).
+
+Given that, this collector is used for CURRENT/recent real sentiment only
+(the "one-page current sentiment outlook" requirement, and to seed the live
+dataset going forward) -- not for deep historical backfill. Every item is
+checked against `_is_mock_item` and dropped if it is a fabricated placeholder.
+
+Field schema (confirmed from a live sample item, 2026-11-08): id, text,
+fullText, createdAt (e.g. "Sun Nov 08 05:02:22 +0000 2026"), likeCount,
+retweetCount, viewCount, replyCount, author.userName, author.followers.
 """
 from datetime import datetime, timezone
 
 import pandas as pd
 
-from config.settings import ASSET_CASHTAG, ASSET_NAME, ASSET_TICKER, HISTORY_DAYS
+from config.settings import ASSET_CASHTAG, ASSET_NAME, ASSET_TICKER
 from ingestion.apify_client import run_actor_and_get_items
 
 CONTEXTUAL_TERMS = [
@@ -31,25 +52,54 @@ def _build_queries() -> list[str]:
     return queries
 
 
-def _build_run_input(query: str, max_items: int = 500) -> dict:
+def _build_run_input(query: str, max_items: int) -> dict:
     return {
         "searchTerms": [query],
         "maxItems": max_items,
-        "sort": "Latest",
-        "historyDays": HISTORY_DAYS,
+        "queryType": "Latest",
+        "lang": "en",
     }
 
 
-def collect_posts(asset: str = None, max_items_per_query: int = 500) -> pd.DataFrame:
+def _is_mock_item(item: dict) -> bool:
+    """This actor pads thin result sets with fake placeholder tweets (id=-1,
+    createdAt=None) rather than returning fewer real results. Must be filtered
+    out or they'll pollute sentiment scoring with fabricated text."""
+    return str(item.get("id")) == "-1" or not item.get("createdAt")
+
+
+def collect_posts(asset: str = None, max_items_per_query: int = 200) -> pd.DataFrame:
+    """Collects current/recent real posts across all queries. See module
+    docstring: this does NOT reach back months -- it captures what's available
+    right now, which is what this actor can actually deliver reliably."""
     asset = asset or ASSET_TICKER
-    all_rows = []
     retrieved_at = datetime.now(timezone.utc).isoformat()
 
-    for query in _build_queries():
+    all_rows = []
+    mock_dropped = 0
+    queries = _build_queries()
+
+    for i, query in enumerate(queries, 1):
         run_input = _build_run_input(query, max_items_per_query)
-        items = run_actor_and_get_items(run_input)
+        try:
+            items = run_actor_and_get_items(run_input)
+        except Exception as e:
+            print(f"  [{i}/{len(queries)}] FAILED for '{query}': {e}")
+            continue
+
+        real_items = []
         for item in items:
+            if _is_mock_item(item):
+                mock_dropped += 1
+            else:
+                real_items.append(item)
+
+        print(f"  [{i}/{len(queries)}] '{query}': {len(real_items)} real items ({len(items) - len(real_items)} mock dropped)")
+        for item in real_items:
             all_rows.append(_normalize_item(item, query, asset, retrieved_at))
+
+    if mock_dropped:
+        print(f"  Total mock/fabricated items dropped across all queries: {mock_dropped}")
 
     if not all_rows:
         return pd.DataFrame()
@@ -60,24 +110,17 @@ def collect_posts(asset: str = None, max_items_per_query: int = 500) -> pd.DataF
 
 
 def _normalize_item(item: dict, query: str, asset: str, retrieved_at: str) -> dict:
-    """Maps a raw Apify dataset item to our x_posts schema.
-
-    Field names below are the common ones used by X search actors; adjust the
-    .get(...) keys if your chosen actor's output differs (inspect one raw item
-    first, e.g. with `python -c "import json,ingestion.x_collector as c; ..."`.)
-    """
+    author = item.get("author") or {}
     return {
-        "post_id": str(item.get("id") or item.get("tweetId") or item.get("url")),
-        "created_at_utc": _to_utc_iso(item.get("createdAt") or item.get("timestamp")),
-        "text": item.get("text") or item.get("fullText") or "",
-        "username": item.get("author", {}).get("userName") if isinstance(item.get("author"), dict) else item.get("username"),
-        "followers_count": _safe_int(
-            item.get("author", {}).get("followers") if isinstance(item.get("author"), dict) else item.get("followersCount")
-        ),
-        "likes": _safe_int(item.get("likeCount") or item.get("likes")),
-        "reposts": _safe_int(item.get("retweetCount") or item.get("reposts")),
-        "views": _safe_int(item.get("viewCount") or item.get("views")),
-        "replies": _safe_int(item.get("replyCount") or item.get("replies")),
+        "post_id": str(item.get("id") or item.get("url")),
+        "created_at_utc": _to_utc_iso(item.get("createdAt")),
+        "text": item.get("fullText") or item.get("text") or "",
+        "username": author.get("userName"),
+        "followers_count": _safe_int(author.get("followers")),
+        "likes": _safe_int(item.get("likeCount")),
+        "reposts": _safe_int(item.get("retweetCount")),
+        "views": _safe_int(item.get("viewCount")),
+        "replies": _safe_int(item.get("replyCount")),
         "search_query": query,
         "asset": asset,
         "retrieved_at_utc": retrieved_at,
@@ -85,7 +128,7 @@ def _normalize_item(item: dict, query: str, asset: str, retrieved_at: str) -> di
 
 
 def _to_utc_iso(ts) -> str:
-    if ts is None:
+    if ts is None or ts == "":
         return ""
     if isinstance(ts, (int, float)):
         return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
@@ -101,7 +144,7 @@ def _safe_int(v) -> int:
 
 if __name__ == "__main__":
     df = collect_posts()
-    print(f"Collected {len(df)} posts")
+    print(f"\nCollected {len(df)} total real posts")
     out_path = "data/raw/x_posts.csv"
     df.to_csv(out_path, index=False)
     print(f"Saved to {out_path}")

@@ -7,7 +7,7 @@ from models.lightgbm_model import build_lightgbm_model
 from models.multi_horizon import predict_multi_horizon, train_multi_horizon
 from models.xgboost_model import build_xgboost_model
 from validation.leakage_checks import assert_no_overlap
-from validation.metrics import forecast_metrics, max_drawdown, sharpe_ratio, sortino_ratio, strategy_returns_from_predictions
+from validation.metrics import PERIODS_PER_YEAR_HOURLY, forecast_metrics, max_drawdown, sharpe_ratio, sortino_ratio, strategy_returns_from_predictions
 from validation.walk_forward import walk_forward_windows
 
 MODEL_BUILDERS = {
@@ -16,7 +16,7 @@ MODEL_BUILDERS = {
 }
 
 
-def run_comparison(dataset: pd.DataFrame, n_splits: int = 4) -> pd.DataFrame:
+def run_comparison(dataset: pd.DataFrame, n_splits: int = 4, periods_per_year: int = PERIODS_PER_YEAR_HOURLY) -> pd.DataFrame:
     """Runs walk-forward validation across all feature sets, models and horizons.
 
     Returns a long-format results table: one row per (feature_set, model, horizon, fold)
@@ -50,8 +50,8 @@ def run_comparison(dataset: pd.DataFrame, n_splits: int = 4) -> pd.DataFrame:
                             "horizon": h,
                             "fold": fold_idx,
                             **fm,
-                            "sharpe_ratio": sharpe_ratio(strat_returns),
-                            "sortino_ratio": sortino_ratio(strat_returns),
+                            "sharpe_ratio": sharpe_ratio(strat_returns, periods_per_year=periods_per_year),
+                            "sortino_ratio": sortino_ratio(strat_returns, periods_per_year=periods_per_year),
                             "max_drawdown": max_drawdown(strat_returns),
                         }
                     )

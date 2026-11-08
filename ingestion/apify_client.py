@@ -22,7 +22,7 @@ def run_actor_and_get_items(run_input: dict, actor_id: str = None) -> list[dict]
         raise RuntimeError("APIFY_ACTOR_ID is not set in .env")
 
     run = client.actor(actor_id).call(run_input=run_input)
-    dataset_id = run["defaultDatasetId"]
+    dataset_id = run["defaultDatasetId"] if isinstance(run, dict) else run.default_dataset_id
 
     items = []
     for item in client.dataset(dataset_id).iterate_items():

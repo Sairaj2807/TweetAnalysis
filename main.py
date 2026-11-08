@@ -36,18 +36,26 @@ def ingest_price():
     print(f"[price] stored {len(df)} bars")
 
 
-def ingest_posts():
-    try:
-        from ingestion.x_collector import collect_posts
+LIVE_POSTS_CACHE = "data/raw/x_posts_live_cache.csv"
 
-        posts = collect_posts()
-    except RuntimeError as e:
-        print(f"[x_posts] SKIPPED ({e}) -- add APIFY_API_TOKEN/APIFY_ACTOR_ID to .env to enable")
-        return pd.DataFrame()
 
-    if posts.empty:
-        print("[x_posts] no posts returned")
-        return posts
+def ingest_posts(use_cache: bool = True):
+    if use_cache and os.path.exists(LIVE_POSTS_CACHE):
+        print(f"[x_posts] loading cached live posts from {LIVE_POSTS_CACHE} (delete this file to force a fresh paid Apify run)")
+        posts = pd.read_csv(LIVE_POSTS_CACHE, parse_dates=["created_at_utc"])
+    else:
+        try:
+            from ingestion.x_collector import collect_posts
+
+            posts = collect_posts()
+        except RuntimeError as e:
+            print(f"[x_posts] SKIPPED ({e}) -- add APIFY_API_TOKEN/APIFY_ACTOR_ID to .env to enable")
+            return pd.DataFrame()
+
+        if posts.empty:
+            print("[x_posts] no posts returned")
+            return posts
+        posts.to_csv(LIVE_POSTS_CACHE, index=False)
 
     posts = clean_posts(dedupe_posts(posts))
     posts = score_posts(posts)

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN", "")
-APIFY_ACTOR_ID = os.getenv("APIFY_ACTOR_ID", "")
+APIFY_ACTOR_ID = os.getenv("APIFY_ACTOR_ID", "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/sentiment_price.db")
 

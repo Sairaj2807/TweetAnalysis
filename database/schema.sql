@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS x_posts (
     sentiment_positive REAL,
     sentiment_negative REAL,
     sentiment_neutral REAL,
-    sentiment_score REAL
+    sentiment_score REAL,
+    engagement_weight REAL
 );
 
 CREATE TABLE IF NOT EXISTS news_articles (
